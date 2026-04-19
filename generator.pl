@@ -89,6 +89,8 @@
 :- use_module(library(lists)).
 :- use_module(library(apply)).
 :- use_module(library(pairs)).
+:- use_module(library(ansi_term)).
+:- set_prolog_flag(color_term, true). 
 :- use_module(generator_graphics).
 
 /*=============================================================================
@@ -248,7 +250,8 @@ product_structure(diesel_generator, [
 % --- GENSET ------------------------------------------------------------------
 
 component(diesel_generator, genset, component{
-    used_in: [v(kva_250, hz_50)], type: rotating_equipment,
+    used_in: [match([apparent_power-kva_250, frequency-hz_50])],
+    type: rotating_equipment,
     quantity: 1, replaceable: true, vendor: 'ABZ', article: 'TAD1-250-50',
     rating_ISO_8528: 'PRP', cosphi: 0.8, 
     active_power: kw_200, rotating_speed: rpm_1500,
@@ -257,7 +260,8 @@ component(diesel_generator, genset, component{
                      avr, excitation_system, cooling_system, lubrication_system]
 }).
 component(diesel_generator, genset, component{
-    used_in: [v(kva_250, hz_60)], type: rotating_equipment,
+    used_in: [match([apparent_power-kva_250, frequency-hz_60])],
+    type: rotating_equipment,
     quantity: 1, replaceable: true, vendor: 'ABZ', article: 'TAD1-250-60',
     rating_ISO_8528: 'PRP', cosphi: 0.8, 
     active_power: kw_200,rotating_speed: rpm_1800,
@@ -266,7 +270,8 @@ component(diesel_generator, genset, component{
                      avr, excitation_system, cooling_system, lubrication_system]
 }).
 component(diesel_generator, genset, component{
-    used_in: [v(kva_400, hz_50)], type: rotating_equipment,
+    used_in: [match([apparent_power-kva_400, frequency-hz_50])],
+    type: rotating_equipment,
     quantity: 1, replaceable: true, vendor: 'ABZ', article: 'TAD2-400-50',
     rating_ISO_8528: 'PRP', cosphi: 0.8, 
     active_power: kw_320, rotating_speed: rpm_1500,
@@ -275,7 +280,8 @@ component(diesel_generator, genset, component{
                      avr, excitation_system, cooling_system, lubrication_system]
 }).
 component(diesel_generator, genset, component{
-    used_in: [v(kva_400, hz_60)], type: rotating_equipment,
+    used_in: [match([apparent_power-kva_400, frequency-hz_60])],
+    type: rotating_equipment,
     quantity: 1, replaceable: true, vendor: 'ABZ', article: 'TAD2-400-60',
     rating_ISO_8528: 'PRP', cosphi: 0.8, 
     active_power: kw_320, rotating_speed: rpm_1800,
@@ -284,7 +290,8 @@ component(diesel_generator, genset, component{
                      avr, excitation_system, cooling_system, lubrication_system]
 }).
 component(diesel_generator, genset, component{
-    used_in: [v(kva_560, hz_50)], type: rotating_equipment,
+    used_in: [match([apparent_power-kva_560, frequency-hz_50])],
+    type: rotating_equipment,
     quantity: 1, replaceable: true, vendor: 'ABZ', article: 'TAD2-560-50',
     rating_ISO_8528: 'PRP', cosphi: 0.8, 
     active_power: kw_448, rotating_speed: rpm_1500,
@@ -293,7 +300,8 @@ component(diesel_generator, genset, component{
                      avr, excitation_system, cooling_system, lubrication_system]
 }).
 component(diesel_generator, genset, component{
-    used_in: [v(kva_560, hz_60)], type: rotating_equipment,
+    used_in: [match([apparent_power-kva_560, frequency-hz_60])],
+    type: rotating_equipment,
     quantity: 1, replaceable: true, vendor: 'ABZ', article: 'TAD2-560-60',
     rating_ISO_8528: 'PRP', cosphi: 0.8, 
     active_power: kw_448, rotating_speed: rpm_1800,
@@ -401,14 +409,18 @@ component(diesel_generator, def_pump, component{
 % --- CONTAINERIZED ENCLOSURE -------------------------------------------------
 
 component(diesel_generator, containerized_enclosure, component{
-    used_in: [eu_stage_5, epa_tier_4, imo_tier_3], type: structural,
+    used_in: [match([emission-eu_stage_5]),
+              match([emission-epa_tier_4]),
+              match([emission-imo_tier_3])],
+    type: structural,
     quantity: 1, replaceable: false, vendor: 'ABZ', article: 'ENCL-01',
     price_dkk: 2800000, service_interval_hours: 30000,
     sub_components: [ventilation_inlet, ventilation_outlet,
                      cable_penetration, access_door]
 }).
 component(diesel_generator, containerized_enclosure, component{
-    used_in: [eu_stage_3], type: structural,
+    used_in: [match([emission-eu_stage_3])],
+    type: structural,
     quantity: 1, replaceable: false, vendor: 'ABZ', article: 'ENCL-02',
     price_dkk: 2200000, service_interval_hours: 30000,
     sub_components: [ventilation_inlet, ventilation_outlet,
@@ -671,15 +683,13 @@ resolve_comp(Product, Name, Config, D) :-
     member(Spec, D.used_in),
     used_in_matches(Spec, Config).
 
-% used_in_matches/2 — three spec shapes; reads Config via config_get only
+% used_in_matches/2 
 used_in_matches(any, _).
-used_in_matches(v(Power, Freq), Config) :-
-    config_get(Config, apparent_power, Power),
-    config_get(Config, frequency,      Freq).
-used_in_matches(EmAtom, Config) :-
-    EmAtom \= any,
-    EmAtom \= v(_,_),
-    config_get(Config, emission, EmAtom).
+used_in_matches(match(Pairs), Config) :-
+    forall(
+        member(Param-Value, Pairs),
+        config_get(Config, Param, Value)
+    ).
 
 /*-----------------------------------------------------------------------------
   2.3  Pricing
@@ -858,6 +868,69 @@ list_variants_with_count(Product) :-
     length(Configs, Total),
     forall(member(C, Configs), format("  ~w~n", [C])),
     format("~nTotal variants: ~w~n", [Total]).
+
+% print_configs_flat(+Product, +Filters)
+% Filters = list of param-value pairs to match against
+% CLI: print_configs_flat(diesel_generator,
+%          [apparent_power-kva_400, emission-eu_stage_5]).
+print_configs_flat(Product, Filters) :-
+    findall(Config,
+        (   product_variant(Product, Config),
+            forall(
+                member(Param-Value, Filters),
+                config_get(Config, Param, Value)
+            )
+        ),
+        Configs),
+    length(Configs, N),
+    format("~nFound ~w configuration(s):~n~n", [N]),
+    forall(
+        member(Config, Configs),
+        (   write('  '),
+            write_term(Config, [quoted(true), max_depth(0)]),
+            nl
+        )
+    ).
+
+% print_config/1
+% Prints a single Config with each pair on its own line.
+% CLI: print_config(Config).
+print_config(Config) :-
+    format("Config = [~n", []),
+    print_config_pairs(Config).
+
+print_config_pairs([Last]) :-
+    !,
+    write('    '),
+    write_term(Last, [quoted(true), max_depth(0)]),
+    nl,
+    format("].~n", []).
+print_config_pairs([H|T]) :-
+    write('    '),
+    write_term(H, [quoted(true), max_depth(0)]),
+    write(','),
+    nl,
+    print_config_pairs(T).
+
+% print_all_configs(+Product, +Filters)
+% Same filter convention, verbose one-per-line output.
+print_all_configs(Product, Filters) :-
+    findall(Config,
+        (   product_variant(Product, Config),
+            forall(
+                member(Param-Value, Filters),
+                config_get(Config, Param, Value)
+            )
+        ),
+        Configs),
+    length(Configs, N),
+    format("~nFound ~w configuration(s):~n", [N]),
+    forall(
+        member(Config, Configs),
+        (   format("~`-t~40|~n", []),
+            print_config(Config)
+        )
+    ).
 
 % list_configs_by_price/1
 % CLI: list_configs_by_price(diesel_generator).
@@ -1254,11 +1327,13 @@ validate_v3 :-
             ;   format("    ERR  ~w  bad used_in: ~w~n", [Name, Spec]) ))).
 
 valid_used_in(any).
-valid_used_in(v(P,F)) :-
-    parameter_values(apparent_power, Ps), member(P, Ps),
-    parameter_values(frequency,      Fs), member(F, Fs).
-valid_used_in(E) :-
-    parameter_values(emission, Es), member(E, Es).
+valid_used_in(match(Pairs)) :-
+    forall(
+        member(Param-Value, Pairs),
+        (   parameter_values(Param, Domain),
+            member(Value, Domain)
+        )
+    ).
 
 validate_v4 :-
     format("[V4] Sub-component references...~n", []),
@@ -1353,9 +1428,15 @@ validate_v9 :-
 nav_footer :-
     format("~n~`-t~60|~n", []),
     format("  Navigation:~n", []),
-    format("    menu.      back to main menu~n", []),
-    format("    menu(N).   open section N  (0=Info, 1-6=sections)~n", []),
-    format("    halt.      exit SWI-Prolog~n", []),
+    % Строка 1: menu.
+    ansi_format([fg(cyan)], "    menu.     ", []),   % Команда
+    format(" back to main menu~n", []),              % Обычный текст
+    % Строка 2: menu(N).
+    ansi_format([fg(cyan)], "    menu(N).  ", []),
+    format(" open section N  (0=Info, 1-6=sections)~n", []),
+    % Строка 3: halt.
+    ansi_format([fg(cyan)], "    halt.     ", []),
+    format(" exit SWI-Prolog~n", []),
     format("~`=t~60|~n~n", []).
 
 %-----------------------------------------------------------------------------
@@ -1363,16 +1444,24 @@ nav_footer :-
 %-----------------------------------------------------------------------------
 menu :-
     format("~n~`=t~60|~n", []),
-    format("  DIESEL GENERATOR CONFIGURATOR  v2.0~n", []),
+    ansi_format([bold], "  DIESEL GENERATOR CONFIGURATOR  v2.0~n", []),
     format("  SWI-Prolog Expert Configurator~n", []),
     format("~`=t~60|~n~n", []),
-    format("  menu(0).   Info & Help~n",   []),
-    format("  menu(1).   Ontology       — inspect parameters & components~n", []),
-    format("  menu(2).   Reasoner       — variants, BoM, pricing logic~n",    []),
-    format("  menu(3).   Queries        — list, count, summarise~n",           []),
-    format("  menu(4).   Presentation   — tree printers~n",                    []),
-    format("  menu(5).   Validation     — ontology integrity checks~n",        []),
-    format("  menu(6).   Graphics       — ASCII diagrams~n",                   []),
+
+    ansi_format([fg(cyan)], "  menu(0).   ", []), 
+    format("Info & Help~n",   []),
+    ansi_format([fg(cyan)], "  menu(1).   ", []), 
+    format("Ontology       — inspect parameters & components~n", []),
+    ansi_format([fg(cyan)], "  menu(2).   ", []), 
+    format("Reasoner       — variants, BoM, pricing logic~n",    []),
+    ansi_format([fg(cyan)], "  menu(3).   ", []), 
+    format("Queries        — list, count, summarise~n",           []),
+    ansi_format([fg(cyan)], "  menu(4).   ", []), 
+    format("Presentation   — tree printers~n",                    []),
+    ansi_format([fg(cyan)], "  menu(5).   ", []), 
+    format("Validation     — ontology integrity checks~n",        []),
+    ansi_format([fg(cyan)], "  menu(6).   ", []), 
+    format("Graphics       — ASCII diagrams~n",                   []),
     nav_footer.
 
 %-----------------------------------------------------------------------------
@@ -1380,14 +1469,14 @@ menu :-
 %-----------------------------------------------------------------------------
 menu(0) :-
     format("~n~`=t~60|~n", []),
-    format("  INFO & HELP~n", []),
+    ansi_format([bold], "  INFO & HELP~n", []),
     format("~`=t~60|~n~n", []),
 
     format("  Program  : Diesel Generator Expert Configurator~n", []),
     format("  Version  : 2.0~n", []),
     format("  Platform : SWI-Prolog 9.x  (threaded, 64-bit)~n", []),
-    format("  Author   : —~n", []),
-    format("  License  : proprietary / internal use~n", []),
+    format("  Author   : Ildar Polyakov~n", []),
+    format("  License  : Copyright (c) 2026 IPOL~n", []),
 
     format("~n  ABOUT~n", []),
     format("  This system generates valid product configurations for~n", []),
@@ -1399,8 +1488,8 @@ menu(0) :-
 
     format("~n  BASIC PROLOG COMMANDS~n", []),
     format("    halt.                   exit SWI-Prolog~n", []),
-    format("    Ctrl+C  then  a.        abort current query~n", []),
-    format("    Ctrl+C  then  c.        continue after interrupt~n", []),
+    format("    Ctrl+C a.               abort current query~n", []),
+    format("    Ctrl+C c.               continue after interrupt~n", []),
     format("    trace.                  enable step-by-step debugger~n", []),
     format("    notrace.                disable debugger~n", []),
     format("    listing(predicate/N).   show source of predicate~n", []),
@@ -1427,6 +1516,8 @@ menu(0) :-
     format("       print_service_tree(~n", []),
     format("           [genset_service-standard, warranty-warranty_5yr],~n",[]),
     format("           eu_stage_5).~n", []),
+    format("~n  NOTE: Config is bound only within a single query.~n", []),
+    format("  To reuse across queries, paste Config = [] before the query.~n", []),
     nav_footer.
 
 %-----------------------------------------------------------------------------
@@ -1434,22 +1525,22 @@ menu(0) :-
 %-----------------------------------------------------------------------------
 menu(1) :-
     format("~n~`=t~60|~n", []),
-    format("  1. ONTOLOGY — inspect parameters & components~n", []),
+    ansi_format([bold], "  1. ONTOLOGY — inspect parameters & components~n", []),
     format("~`=t~60|~n~n", []),
 
     format("  Inspect product parameters~n", []),
-    format("    list_parameters(diesel_generator).~n", []),
+    ansi_format([fg(cyan)], "    list_parameters(diesel_generator).~n", []),
     format("~n  Inspect values for one parameter~n", []),
-    format("    list_values(apparent_power).~n", []),
-    format("    list_values(voltage).~n", []),
-    format("    list_values(frequency).~n", []),
-    format("    list_values(emission).~n", []),
-    format("    list_values(certification).~n", []),
+    ansi_format([fg(cyan)], "    list_values(apparent_power).~n", []),
+    ansi_format([fg(cyan)], "    list_values(voltage).~n", []),
+    ansi_format([fg(cyan)], "    list_values(frequency).~n", []),
+    ansi_format([fg(cyan)], "    list_values(emission).~n", []),
+    ansi_format([fg(cyan)], "    list_values(certification).~n", []),
     format("~n  Inspect service catalogue~n", []),
-    format("    list_service_items.~n", []),
-    format("    list_available_service_items(eu_stage_5).~n", []),
-    format("    list_available_service_items(eu_stage_3).~n", []),
-    format("    list_available_service_items(epa_tier_4).~n", []),
+    ansi_format([fg(cyan)], "    list_service_items.~n", []),
+    ansi_format([fg(cyan)], "    list_available_service_items(eu_stage_5).~n", []),
+    ansi_format([fg(cyan)], "    list_available_service_items(eu_stage_3).~n", []),
+    ansi_format([fg(cyan)], "    list_available_service_items(epa_tier_4).~n", []),
     nav_footer.
 
 %-----------------------------------------------------------------------------
@@ -1457,35 +1548,35 @@ menu(1) :-
 %-----------------------------------------------------------------------------
 menu(2) :-
     format("~n~`=t~60|~n", []),
-    format("  2. REASONER — variants, BoM, pricing logic~n", []),
+    ansi_format([bold], "  2. REASONER — variants, BoM, pricing logic~n", []),
     format("~`=t~60|~n~n", []),
 
     format("  Generate all valid configurations (backtrack with ;)~n", []),
-    format("    product_variant(diesel_generator, Config).~n", []),
+    ansi_format([fg(cyan)], "    product_variant(diesel_generator, Config).~n", []),
     format("~n  Read one value from a Config~n", []),
-    format("    config_get(Config, apparent_power, V).~n", []),
-    format("    config_get(Config, emission, V).~n", []),
+    ansi_format([fg(cyan)], "    config_get(Config, apparent_power, V).~n", []),
+    ansi_format([fg(cyan)], "    config_get(Config, emission, V).~n", []),
     format("~n  Resolve Bill of Materials for a Config~n", []),
-    format("    config_bom(diesel_generator, Config, BoM).~n", []),
+    ansi_format([fg(cyan)], "    config_bom(diesel_generator, Config, BoM).~n", []),
     format("~n  Calculate total price for a Config~n", []),
-    format("    config_price(diesel_generator, Config, Price).~n", []),
+    ansi_format([fg(cyan)], "    config_price(diesel_generator, Config, Price).~n", []),
     format("~n  Price extremes~n", []),
-    format("    cheapest_configs(diesel_generator, Configs, Price).~n", []),
-    format("    most_expensive_configs(diesel_generator, Configs, Price).~n",[]),
-    format("    all_configs_by_price(diesel_generator, Sorted).~n", []),
+    ansi_format([fg(cyan)], "    cheapest_configs(diesel_generator, Configs, Price).~n", []),
+    ansi_format([fg(cyan)], "    most_expensive_configs(diesel_generator, Configs, Price).~n",[]),
+    ansi_format([fg(cyan)], "    all_configs_by_price(diesel_generator, Sorted).~n", []),
     format("~n  Service reasoning~n", []),
-    format("    service_variant(genset_service, standard, eu_stage_5, D).~n",[]),
-    format("    service_item_available(scr_service, standard, eu_stage_5).~n",[]),
-    format("    all_available_service_variants(eu_stage_5, Pairs).~n", []),
-    format("    service_cheapest_variant(genset_service, eu_stage_5, VK, Price).~n",[]),
-    format("    service_most_expensive_variant(genset_service, eu_stage_5, VK, Price).~n",[]),
-    format("    service_scope_price(~n", []),
-    format("        [genset_service-standard, warranty-warranty_5yr],~n", []),
-    format("        eu_stage_5, Total).~n", []),
+    ansi_format([fg(cyan)], "    service_variant(genset_service, standard, eu_stage_5, D).~n",[]),
+    ansi_format([fg(cyan)], "    service_item_available(scr_service, standard, eu_stage_5).~n",[]),
+    ansi_format([fg(cyan)], "    all_available_service_variants(eu_stage_5, Pairs).~n", []),
+    ansi_format([fg(cyan)], "    service_cheapest_variant(genset_service, eu_stage_5, VK, Price).~n",[]),
+    ansi_format([fg(cyan)], "    service_most_expensive_variant(genset_service, eu_stage_5, VK, Price).~n",[]),
+    ansi_format([fg(cyan)], "    service_scope_price(~n", []),
+    ansi_format([fg(cyan)], "        [genset_service-standard, warranty-warranty_5yr],~n", []),
+    ansi_format([fg(cyan)], "        eu_stage_5, Total).~n", []),
     format("~n  Q&A helpers~n", []),
-    format("    components_requiring_param(emission, eu_stage_5, Names).~n",[]),
-    format("    variants_for_param_value(diesel_generator,~n", []),
-    format("        apparent_power, kva_400, Configs).~n", []),
+    ansi_format([fg(cyan)], "    components_requiring_param(emission, eu_stage_5, Names).~n",[]),
+    ansi_format([fg(cyan)], "    variants_for_param_value(diesel_generator,~n", []),
+    ansi_format([fg(cyan)], "        apparent_power, kva_400, Configs).~n", []),
     nav_footer.
 
 %-----------------------------------------------------------------------------
@@ -1493,33 +1584,46 @@ menu(2) :-
 %-----------------------------------------------------------------------------
 menu(3) :-
     format("~n~`=t~60|~n", []),
-    format("  3. QUERIES — list, count, summarise~n", []),
+    ansi_format([bold], "  3. QUERIES — list, count, summarise~n", []),
     format("~`=t~60|~n~n", []),
 
     format("  List / count configurations~n", []),
-    format("    list_variants(diesel_generator).~n", []),
-    format("    list_variants_with_count(diesel_generator).~n", []),
-    format("    count_variants(diesel_generator, N).~n", []),
+    ansi_format([fg(cyan)], "    list_variants(diesel_generator).~n", []),
+    ansi_format([fg(cyan)], "    list_variants_with_count(diesel_generator).~n", []),
+    ansi_format([fg(cyan)], "    count_variants(diesel_generator, N).~n", []),
     format("~n  Configurations sorted by price~n", []),
-    format("    list_configs_by_price(diesel_generator).~n", []),
+    format("~`-t~60|~n", []),
+    ansi_format([fg(cyan)], "    list_configs_by_price(diesel_generator).~n", []),
     format("~n  Full configuration summary (BoM + price flat list)~n", []),
-    format("    %% First obtain a Config (see menu(2)), then:~n", []),
-    format("    print_config_summary(diesel_generator, Config).~n", []),
+    format("~`-t~60|~n", []),
+    format("    ~c First obtain a Config (see menu(2) or take from list_variants), then:~n", [37]),
+    ansi_format([fg(cyan)], "    Config = [~c list here param-value pairs],~n", [37]),
+    ansi_format([fg(cyan)], "    print_config_summary(diesel_generator, Config).~n", []),
+    format("~n  _______[ Config display, sinle param per line ]_______~n", []),
+    ansi_format([fg(cyan)], "    print_config(Config).~n", []),
+    format("~n  _______[ All Configs display, +Filters        ]_______~n", []),
+    format("    ~c Filters = list of param-value pairs to match against~n", [37]),
+    ansi_format([fg(cyan)], "    print_configs_flat(diesel_generator,~n", []),
+    ansi_format([fg(cyan)], "        [apparent_power-kva_400, emission-eu_stage_5]).~n", []),
+    format("~n  _______[ All Configs display, sinle param per line ]_____~n", []),
+    ansi_format([fg(cyan)], "    print_all_configs(diesel_generator,~n", []),
+    ansi_format([fg(cyan)], "        [apparent_power-kva_400, emission-eu_stage_5]).~n", []),
     format("~n  Component inspection~n", []),
-    format("    list_component_types.~n", []),
-    format("    list_components_of_type(static_equipment).~n", []),
-    format("    list_vendors.~n", []),
-    format("    list_components_by_vendor('Dinex').~n", []),
-    format("    list_components_by_replaceability(true).~n", []),
-    format("    list_components_by_replaceability(false).~n", []),
-    format("    list_components_by_service_interval(below, 5000).~n", []),
-    format("    list_components_by_service_interval(above, 9000).~n", []),
-    format("~n  Service scope summary (flat list + total)~n", []),
-    format("    print_service_scope_summary(~n", []),
-    format("        [genset_service-standard,~n", []),
-    format("         cabinet_service-extended,~n", []),
-    format("         warranty-warranty_5yr],~n", []),
-    format("        eu_stage_5).~n", []),
+    format("~`-t~60|~n", []),
+    ansi_format([fg(cyan)], "    list_component_types.~n", []),
+    ansi_format([fg(cyan)], "    list_components_of_type(static_equipment).~n", []),
+    ansi_format([fg(cyan)], "    list_vendors.~n", []),
+    ansi_format([fg(cyan)], "    list_components_by_vendor('Dinex').~n", []),
+    ansi_format([fg(cyan)], "    list_components_by_replaceability(true).~n", []),
+    ansi_format([fg(cyan)], "    list_components_by_replaceability(false).~n", []),
+    ansi_format([fg(cyan)], "    list_components_by_service_interval(below, 5000).~n", []),
+    ansi_format([fg(cyan)], "    list_components_by_service_interval(above, 9000).~n", []),
+    format("~n----« Service scope summary (flat list + total) »---------~n", []),
+    ansi_format([fg(cyan)], "    print_service_scope_summary(~n", []),
+    ansi_format([fg(cyan)], "        [genset_service-standard,~n", []),
+    ansi_format([fg(cyan)], "         cabinet_service-extended,~n", []),
+    ansi_format([fg(cyan)], "         warranty-warranty_5yr],~n", []),
+    ansi_format([fg(cyan)], "        eu_stage_5).~n", []),
     nav_footer.
 
 %-----------------------------------------------------------------------------
@@ -1527,32 +1631,32 @@ menu(3) :-
 %-----------------------------------------------------------------------------
 menu(4) :-
     format("~n~`=t~60|~n", []),
-    format("  4. PRESENTATION — tree printers~n", []),
+    ansi_format([bold],  " 4. PRESENTATION — tree printers~n", []),
     format("~`=t~60|~n~n", []),
 
-    format("  BoM tree — query Config then print~n", []),
-    format("    product_variant(diesel_generator, Config),~n", []),
-    format("    config_get(Config, apparent_power, kva_400),~n", []),
-    format("    config_get(Config, emission, eu_stage_5), !,~n", []),
-    format("    print_bom_tree(diesel_generator, Config).~n", []),
-    format("~n  BoM tree — supply Config directly~n", []),
-    format("    print_bom_tree(diesel_generator,~n", []),
-    format("        [apparent_power-kva_400, voltage-v_400,~n", []),
-    format("         frequency-hz_50, emission-eu_stage_5,~n", []),
-    format("         certification-ce]).~n", []),
-    format("~n  Service tree — chosen scope~n", []),
-    format("    print_service_tree(~n", []),
-    format("        [genset_service-standard,~n", []),
-    format("         cabinet_service-extended,~n", []),
-    format("         commissioning-full,~n", []),
-    format("         scr_service-extended,~n", []),
-    format("         warranty-warranty_5yr,~n", []),
-    format("         remote_monitoring-advanced],~n", []),
-    format("        eu_stage_5).~n", []),
-    format("~n  Service tree — cheapest available per item~n", []),
-    format("    print_cheapest_service_scope(eu_stage_5).~n", []),
-    format("    print_cheapest_service_scope(eu_stage_3).~n", []),
-    format("    print_cheapest_service_scope(epa_tier_4).~n", []),
+    format("-----------« BoM tree — query Config then print »---------~n", []),
+    ansi_format([fg(cyan)], "    product_variant(diesel_generator, Config),~n", []),
+    ansi_format([fg(cyan)], "    config_get(Config, apparent_power, kva_400),~n", []),
+    ansi_format([fg(cyan)], "    config_get(Config, emission, eu_stage_5), !,~n", []),
+    ansi_format([fg(cyan)], "    print_bom_tree(diesel_generator, Config).~n", []),
+    format("~n----[ BoM tree — supply Config directly ]----~n", []),
+    ansi_format([fg(cyan)], "    print_bom_tree(diesel_generator,~n", []),
+    ansi_format([fg(cyan)], "        [apparent_power-kva_400, voltage-v_400,~n", []),
+    ansi_format([fg(cyan)], "         frequency-hz_50, emission-eu_stage_5,~n", []),
+    ansi_format([fg(cyan)], "         certification-ce]).~n", []),
+    format("~n----« Service tree — chosen scope »---------~n", []),
+    ansi_format([fg(cyan)], "    print_service_tree(~n", []),
+    ansi_format([fg(cyan)], "        [genset_service-standard,~n", []),
+    ansi_format([fg(cyan)], "         cabinet_service-extended,~n", []),
+    ansi_format([fg(cyan)], "         commissioning-full,~n", []),
+    ansi_format([fg(cyan)], "         scr_service-extended,~n", []),
+    ansi_format([fg(cyan)], "         warranty-warranty_5yr,~n", []),
+    ansi_format([fg(cyan)], "         remote_monitoring-advanced],~n", []),
+    ansi_format([fg(cyan)], "        eu_stage_5).~n", []),
+    format("~n_______[ Service tree — cheapest available per item ]______~n", []),
+    ansi_format([fg(cyan)], "    print_cheapest_service_scope(eu_stage_5).~n", []),
+    ansi_format([fg(cyan)], "    print_cheapest_service_scope(eu_stage_3).~n", []),
+    ansi_format([fg(cyan)], "    print_cheapest_service_scope(epa_tier_4).~n", []),
     nav_footer.
 
 %-----------------------------------------------------------------------------
@@ -1560,11 +1664,11 @@ menu(4) :-
 %-----------------------------------------------------------------------------
 menu(5) :-
     format("~n~`=t~60|~n", []),
-    format("  5. VALIDATION — ontology integrity checks~n", []),
+    ansi_format([bold],  " 5. VALIDATION — ontology integrity checks~n", []),
     format("~`=t~60|~n~n", []),
 
     format("  Run all checks (V1-V9)~n", []),
-    format("    validate_ontology.~n", []),
+    ansi_format([fg(cyan)], "    validate_ontology.~n", []),
     format("~n  What the checks cover:~n", []),
     format("    V1  every declared parameter has a domain~n", []),
     format("    V2  every product_structure entry has a component/3 fact~n",[]),
@@ -1585,12 +1689,12 @@ menu(5) :-
 %-----------------------------------------------------------------------------
 menu(6) :-
     format("~n~`=t~60|~n", []),
-    format("  6. GRAPHICS — ASCII diagrams~n", []),
+    ansi_format([bold],  " 6. GRAPHICS — ASCII diagrams~n", []),
     format("~`=t~60|~n~n", []),
     format("  Single-line diagram display~n", []),
-    format("    diagram(single_line).~n", []),
+    ansi_format([fg(cyan)], "    diagram(single_line).~n", []),
     format("~n  All available diagrams~n", []),
-    format("    list_diagrams.~n", []),
+    ansi_format([fg(cyan)], "    list_diagrams.~n", []),
     nav_footer.
 
 %-----------------------------------------------------------------------------
@@ -1602,7 +1706,25 @@ menu(N) :-
     format("~n  Unknown section: ~w~n", [N]),
     format("  Valid sections: 0 (Info) through 6 (Graphics).~n~n", []),
     menu.
- 
+
+%-----------------------------------------------------------------------------
+% test
+%-----------------------------------------------------------------------------
+
+render_menu_v3 :-
+    % Заголовок: жирный + подчеркнутый (самый стандартный набор)
+    ansi_format([bold, underline], "~n  2. REASONER — variants, BoM, pricing logic~n", []),
+
+    % Описание: просто цвет (например, cyan), без hbold
+    ansi_format([fg(cyan)], "~n  Generate all valid configurations (backtrack with ;)~n", []),
+    
+    % Команда: просто жирный (самый безопасный способ выделить код)
+    ansi_format([bold], "    product_variant(diesel_generator, Config).~n", []),
+
+    ansi_format([fg(cyan)], "~n  Calculate total price for a Config~n", []),
+    ansi_format([bold], "    config_price(diesel_generator, Config, Price).~n", []).
+
+
 % main/0 — entry point for the standalone executable.
 % Prints the main menu then hands control to the interactive REPL.
 % Used by: swipl ... qsave_program(..., goal(main), ...)
